@@ -3,7 +3,7 @@ import pandas as pd
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os
-from datetime import datetime
+import json
 import re
 
 class CSVToGoogleSheet:
@@ -17,7 +17,18 @@ class CSVToGoogleSheet:
             "https://www.googleapis.com/auth/drive",
             "https://www.googleapis.com/auth/spreadsheets"
         ]
-        creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
+        
+        # Пытаемся получить credentials из переменной окружения (для Railway)
+        creds_json = os.environ.get("GOOGLE_CREDENTIALS")
+        if creds_json:
+            print("✅ Используем credentials из переменной окружения GOOGLE_CREDENTIALS")
+            creds_dict = json.loads(creds_json)
+            creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        else:
+            # fallback на файл (для локальной разработки)
+            print(f"📂 Используем credentials из файла: {credentials_file}")
+            creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
+        
         self.client = gspread.authorize(creds)
         self.sheet = self.client.open(sheet_name)
         self.worksheet = self.sheet.sheet1
@@ -62,53 +73,37 @@ class CSVToGoogleSheet:
         
         return value_str
     
-    def upload_csv(self, csv_file=None, df=None, column_mapping=None, transformations=None, 
-                   encoding='utf-8-sig', delimiter=';', column_a_settings=None,
-                   number_columns=None):
-        """
-        Загружает данные из CSV или DataFrame в Google Sheets
-        """
+    def upload_csv(self, df=None, column_mapping=None, transformations=None, 
+                   column_a_settings=None, number_columns=None):
+        """Загружает данные из DataFrame в Google Sheets"""
         
-        # Если передан DataFrame, используем его
-        if df is not None:
-            print(f"\n📊 Обработка DataFrame с {len(df)} строками")
-            data_df = df
-        elif csv_file is not None:
-            print(f"\n📂 Читаем файл: {os.path.basename(csv_file)}")
-            try:
-                data_df = pd.read_csv(csv_file, encoding=encoding, delimiter=delimiter)
-                data_df.columns = data_df.columns.str.strip()
-                print(f"✅ Прочитано {len(data_df)} строк")
-            except Exception as e:
-                print(f"❌ Ошибка чтения CSV: {e}")
-                return False
-        else:
-            print("❌ Не указан источник данных")
+        if df is None:
             return False
+        
+        print(f"📊 Обработка {len(df)} строк")
+        
+        MAX_COL = 11
         
         # Проверяем наличие колонок
         csv_cols = list(column_mapping.keys())
-        missing_cols = [col for col in csv_cols if col not in data_df.columns]
+        missing_cols = [col for col in csv_cols if col not in df.columns]
         if missing_cols:
             print(f"❌ В данных отсутствуют колонки: {missing_cols}")
             return False
         
         existing_data = self.worksheet.get_all_values()
         current_rows = len(existing_data)
-        MAX_COL = 11
         
         if current_rows == 0:
-            print(f"\n📋 Создаем заголовки...")
+            print(f"📋 Создаем заголовки...")
             header_row = [''] * MAX_COL
-            
             for csv_col, gsheet_col in column_mapping.items():
                 col_num = self._column_letter_to_number(gsheet_col) - 1
                 header_row[col_num] = csv_col
-            
             self.worksheet.update('A1', [header_row])
             current_rows = 1
         
-        print(f"\n📤 Подготавливаем данные с преобразованиями...")
+        print(f"📤 Подготавливаем данные...")
         rows_to_upload = []
         
         fill_a_only_first = False
@@ -118,15 +113,12 @@ class CSVToGoogleSheet:
             a_column = column_a_settings.get('column', 'A')
             print(f"📌 Настройка: колонка {a_column} заполняется только в первой строке")
         
-        first_row_a_value = None
-        first_row_a_raw_value = None
-        
         if number_columns is None:
             number_columns = ['F', 'G']
         
         print(f"📊 Числовые колонки: {', '.join(number_columns)}")
         
-        for idx, (_, row) in enumerate(data_df.iterrows(), 1):
+        for idx, (_, row) in enumerate(df.iterrows(), 1):
             new_row = [''] * MAX_COL
             
             for csv_col, gsheet_col in column_mapping.items():
@@ -135,7 +127,6 @@ class CSVToGoogleSheet:
                 
                 if fill_a_only_first and gsheet_col == a_column:
                     if idx == 1:
-                        first_row_a_raw_value = value
                         clean_value = str(value).replace("'", "").strip()
                         try:
                             if '.' in clean_value:
@@ -148,7 +139,6 @@ class CSVToGoogleSheet:
                                 clean_value = int(clean_value)
                         except (ValueError, TypeError):
                             pass
-                        first_row_a_value = clean_value
                         new_row[col_num] = clean_value if not pd.isna(clean_value) else ''
                     else:
                         new_row[col_num] = ''
@@ -176,9 +166,6 @@ class CSVToGoogleSheet:
             
             rows_to_upload.append(new_row)
         
-        if fill_a_only_first and first_row_a_value is not None:
-            print(f"📌 Колонка {a_column}: '{first_row_a_raw_value}' → '{first_row_a_value}'")
-        
         start_row = current_rows + 1
         try:
             self.worksheet.update(f'A{start_row}', rows_to_upload)
@@ -193,9 +180,7 @@ class CSVToGoogleSheet:
                 except Exception as e:
                     print(f"⚠️ Не удалось применить числовой формат для колонки {col}: {e}")
             
-            print(f"\n✅ УСПЕШНО ЗАГРУЖЕНО!")
-            print(f"📊 Загружено строк: {len(rows_to_upload)}")
-            
+            print(f"✅ Успешно загружено {len(rows_to_upload)} строк")
             return True
             
         except Exception as e:
