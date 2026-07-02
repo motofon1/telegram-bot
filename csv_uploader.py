@@ -18,19 +18,19 @@ class CSVToGoogleSheet:
             "https://www.googleapis.com/auth/spreadsheets"
         ]
         
-        # Пытаемся получить credentials из переменной окружения (для Railway)
+        # СНАЧАЛА проверяем переменную окружения (для Railway)
         creds_json = os.environ.get("GOOGLE_CREDENTIALS")
         if creds_json:
             print("✅ Используем credentials из переменной окружения GOOGLE_CREDENTIALS")
             creds_dict = json.loads(creds_json)
             creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         else:
-            # fallback на файл (для локальной разработки)
+            # ПОТОМ проверяем файл (для локальной разработки)
             print(f"📂 Используем credentials из файла: {credentials_file}")
             if not os.path.exists(credentials_file):
                 print(f"❌ Файл {credentials_file} не найден!")
                 print("📌 Добавьте GOOGLE_CREDENTIALS в переменные окружения Railway")
-                raise FileNotFoundError(f"Файл {credentials_file} не найден")
+                raise FileNotFoundError(f"Файл {credentials_file} не найден. Добавьте GOOGLE_CREDENTIALS в переменные окружения.")
             creds = ServiceAccountCredentials.from_json_keyfile_name(credentials_file, scope)
         
         self.client = gspread.authorize(creds)
