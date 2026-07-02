@@ -194,31 +194,32 @@ def main():
     print("🤖 ЗАПУСК TELEGRAM БОТА")
     print("="*60)
     
-    # Проверяем наличие токена
     if not TELEGRAM_TOKEN:
-        print("❌ Токен бота не найден! Добавьте TELEGRAM_TOKEN в .env файл")
+        print("❌ Токен бота не найден!")
+        print("📌 Установите переменную окружения TELEGRAM_TOKEN")
         return
     
-    # Проверяем credentials
     if not os.path.exists(CREDENTIALS_FILE):
         print(f"❌ Файл {CREDENTIALS_FILE} не найден!")
         return
     
-    # Создаем приложение
-    application = Application.builder().token(TELEGRAM_TOKEN).build()
-    
-    # Регистрируем команды
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(MessageHandler(filters.Document.ALL, handle_file))
-    
-    # Регистрируем обработчик ошибок
-    application.add_error_handler(error_handler)
-    
-    # Запускаем бота
-    print("🤖 Бот запущен!")
-    print("📡 Ожидание сообщений...")
-    print("="*60)
+    try:
+        application = Application.builder().token(TELEGRAM_TOKEN).build()
+        
+        application.add_handler(CommandHandler("start", start))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(MessageHandler(filters.Document.ALL, handle_file))
+        application.add_error_handler(error_handler)
+        
+        print("🤖 Бот запущен! Ожидание сообщений...")
+        print("="*60)
+        
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
+        
+    except Exception as e:
+        print(f"❌ Ошибка при запуске бота: {e}")
+        import traceback
+        traceback.print_exc()
     
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 
