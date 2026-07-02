@@ -1,22 +1,22 @@
 # config.py
 import os
-from dotenv import load_dotenv
 
-# Загружаем переменные из .env
-load_dotenv()
+# ============================================
+# ТОЧНОЕ НАЗВАНИЕ ВАШЕЙ ТАБЛИЦЫ
+# ============================================
 
 # Google Sheets настройки
 CREDENTIALS_FILE = "credentials.json"
 SHEET_NAME = "Zajavki"  # замените на название вашей таблицы
 SHEET_URL = "https://docs.google.com/spreadsheets/d/12NaWy9CnZ0r04xrm7hT0_WgFtssRB38wsRAJeQFkT04/edit"  # ссылка на таблицу
 
-# Telegram настройки (теперь должно работать!)
-TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
+# Telegram настройки (берем из переменных окружения Railway)
+TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 
 # Проверяем загрузился ли токен
 if not TELEGRAM_TOKEN:
-    print("⚠️ ВНИМАНИЕ! Токен не загружен из .env")
-    print("📌 Проверьте, что файл .env существует и содержит TELEGRAM_TOKEN")
+    print("⚠️ ВНИМАНИЕ! Токен не найден в переменных окружения")
+    print("📌 Добавьте TELEGRAM_TOKEN в Variables на Railway")
 else:
     print("✅ Токен загружен успешно!")
 
@@ -40,9 +40,11 @@ DATA_TRANSFORMATIONS = {
 }
 
 NUMBER_COLUMNS = ['A', 'B', 'F', 'G']
+
 COLUMN_A_SETTINGS = {
     'fill_only_first_row': True,
     'column': 'A'
 }
+
 CSV_ENCODING = 'utf-8-sig'
 CSV_DELIMITER = ';'
