@@ -3,4 +3,4 @@ pandas==2.1.4
 gspread==5.12.4
 oauth2client==4.1.3
 google-auth==2.25.2
-python-dotenv==1.0.0
+httplib2==0.22.0
