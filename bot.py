@@ -16,24 +16,18 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Состояния пользователей
-user_data_store = {}
-
 class CSVProcessor:
     def __init__(self):
         self.uploader = CSVToGoogleSheet(CREDENTIALS_FILE, SHEET_NAME)
     
     def process_csv(self, file_content, filename):
-        """Обрабатывает CSV файл и возвращает результат"""
         try:
-            # Читаем CSV
             df = pd.read_csv(io.BytesIO(file_content), encoding=CSV_ENCODING, delimiter=CSV_DELIMITER)
             df.columns = df.columns.str.strip()
             
             total_rows = len(df)
             logger.info(f"Файл {filename}: прочитано {total_rows} строк")
             
-            # Проверяем наличие колонок
             csv_cols = list(COLUMN_MAPPING.keys())
             missing_cols = [col for col in csv_cols if col not in df.columns]
             if missing_cols:
@@ -43,7 +37,6 @@ class CSVProcessor:
                     'available_columns': ', '.join(df.columns)
                 }
             
-            # Загружаем в Google Sheets
             result = self.uploader.upload_csv(
                 df=df,
                 column_mapping=COLUMN_MAPPING,
@@ -71,13 +64,9 @@ class CSVProcessor:
                 'error': f"❌ Ошибка: {str(e)}"
             }
 
-# Создаем процессор
 processor = CSVProcessor()
 
-# === КОМАНДЫ БОТА ===
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Приветственное сообщение"""
     welcome_text = f"""
 👋 Привет! Я бот для загрузки данных в Google Таблицу.
 
@@ -86,21 +75,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 2. Я проверю данные и загружу их в таблицу
 3. Ты получишь уведомление о результате
 
-📊 **Таблица доступна по ссылке:**
-[Открыть таблицу]({SHEET_URL})
-
-⚙️ **Формат файла:**
-- Разделитель: `{CSV_DELIMITER}`
-- Кодировка: `{CSV_ENCODING}`
-- Обязательные колонки: ID РК, ID размещения, Блогер, Цена блогера, Итого, Уведомления
+📊 **Таблица:** [Открыть]({SHEET_URL})
 
 📌 Просто отправь файл и я всё сделаю!
 """
-    
     await update.message.reply_text(welcome_text, parse_mode='Markdown')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Помощь"""
     help_text = f"""
 📖 **Помощь**
 
@@ -108,55 +89,29 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 2. **/start** — показать приветствие
 3. **/help** — показать это сообщение
 
-📋 **Требования к CSV:**
-- Разделитель: `;`
-- Кодировка: `UTF-8`
-- Колонки: ID РК, ID размещения, Блогер, Цена блогера, Итого, Уведомления
-
 🔗 **Таблица:** [Открыть]({SHEET_URL})
 """
-    
     await update.message.reply_text(help_text, parse_mode='Markdown')
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка полученного файла"""
-    user_id = update.effective_user.id
-    username = update.effective_user.username or "неизвестно"
-    
-    # Получаем файл
     document = update.message.document
     if not document.file_name.endswith('.csv'):
         await update.message.reply_text("❌ Пожалуйста, отправьте файл в формате CSV")
         return
     
-    # Проверяем размер
-    if document.file_size > 10 * 1024 * 1024:  # 10 MB
+    if document.file_size > 10 * 1024 * 1024:
         await update.message.reply_text("❌ Файл слишком большой (максимум 10 MB)")
         return
     
-    # Отправляем сообщение о начале обработки
     processing_msg = await update.message.reply_text(f"🔄 Обрабатываю файл `{document.file_name}`...", parse_mode='Markdown')
     
     try:
-        # Скачиваем файл
         file = await context.bot.get_file(document.file_id)
         file_content = await file.download_as_bytearray()
         
-        # Обрабатываем
         result = processor.process_csv(file_content, document.file_name)
         
         if result['success']:
-            # Сохраняем информацию о загрузке
-            if user_id not in user_data_store:
-                user_data_store[user_id] = {}
-            user_data_store[user_id]['last_upload'] = {
-                'filename': document.file_name,
-                'status': 'success',
-                'time': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-                'rows': result['rows_uploaded']
-            }
-            
-            # Успешное сообщение
             await processing_msg.edit_text(
                 f"{result['message']}\n\n"
                 f"📊 **Файл:** `{document.file_name}`\n"
@@ -165,29 +120,22 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"📅 **Время:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}",
                 parse_mode='Markdown'
             )
-            
         else:
-            # Ошибка
             await processing_msg.edit_text(
-                f"❌ **Ошибка загрузки:**\n\n{result['error']}\n\n"
-                f"📋 **Доступные колонки в файле:**\n{result.get('available_columns', 'неизвестно')}\n\n"
-                f"💡 Проверьте, что в CSV есть все нужные колонки",
+                f"❌ **Ошибка загрузки:**\n\n{result['error']}",
                 parse_mode='Markdown'
             )
             
     except Exception as e:
         logger.error(f"Ошибка при обработке файла: {e}")
-        await processing_msg.edit_text(f"❌ Произошла ошибка при обработке файла: {str(e)}")
+        await processing_msg.edit_text(f"❌ Произошла ошибка: {str(e)}")
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Обработка ошибок"""
     logger.error(f"Update {update} caused error {context.error}")
     if update and update.effective_message:
         await update.effective_message.reply_text(
-            "❌ Произошла ошибка. Попробуйте позже или обратитесь к администратору."
+            "❌ Произошла ошибка. Попробуйте позже."
         )
-
-# === ЗАПУСК БОТА ===
 
 def main():
     print("="*60)
@@ -199,9 +147,8 @@ def main():
         print("📌 Установите переменную окружения TELEGRAM_TOKEN")
         return
     
-    if not os.path.exists(CREDENTIALS_FILE):
-        print(f"❌ Файл {CREDENTIALS_FILE} не найден!")
-        return
+    # Убираем проверку файла credentials.json!
+    # Он будет загружен из переменной окружения GOOGLE_CREDENTIALS
     
     try:
         application = Application.builder().token(TELEGRAM_TOKEN).build()
@@ -220,8 +167,6 @@ def main():
         print(f"❌ Ошибка при запуске бота: {e}")
         import traceback
         traceback.print_exc()
-    
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
