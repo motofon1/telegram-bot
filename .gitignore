@@ -1,0 +1,37 @@
+# Google Cloud ключи (НЕ ЗАГРУЖАТЬ!)
+credentials.json
+*.json
+
+# Переменные окружения (токены)
+.env
+.env.local
+.env.*.local
+
+# Python
+venv/
+env/
+ENV/
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+pip-log.txt
+pip-delete-this-directory.txt
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Логи
+*.log
+
+# Railway (опционально)
+.railway/
